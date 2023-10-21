@@ -1,11 +1,11 @@
-    //Works! October 20, 2023
+    //Works! October 21, 2023
     
-    // Expects 6 Params from Matlab in the following order and MatlabParams class:
-    // MLparams MatlabParams MLparams[mode pwmNow HeatCool Kp KI Tset] with formats [%s %d %d %f %f %f]
+    // Expects 7 Params from Matlab in the following order and MatlabParams class:
+    // MLparams MatlabParams MLparams[mode pwmNow HeatCool Kp KI Tset ResetInt] with formats [%s %d %d %f %f %f %d]
     // Uses a String tokenizer to split the received string at spaces
 
-    // Sends output of 4 values to Matlab as a ArduinoParams class:  
-    // ArduinoParams ARDparams[temp, time, pwmNow, HeatCool] with formats [%f, %f, %d, %d]
+    // Sends output of 6 values to Matlab as a ArduinoParams class:  
+    // ArduinoParams ARDparams[temp, time, pwmNow, HeatCool, error, Integral] with formats [%f, %f, %d, %d, %f %f]
 
 
 
@@ -183,7 +183,7 @@ else if (strcmp(MLparams.mode.c_str(), "Proportional") == 0) {
             ARDparams.Integral = ARDparams.Integral + dt * ARDparams.error;  // update integral of error
             ARDparams.Integral =  ARDparams.Integral * MLparams.ResetInt;    // zero integral?
             if (MLparams.ResetInt == 0){  // reset zero command
-              MLparams.ResetInt = 1;
+              MLparams.ResetInt = 1;  // allows integration on next iteration
             }
             float u = MLparams.Kp * ARDparams.error + MLparams.KI * ARDparams.Integral;  // calculate PI feedback
             ARDparams.pwmNow = min(abs(round(u)),255);  // magnitude of PI feedback term u limited to a max of 255 for arduino PWM
@@ -223,7 +223,7 @@ else if (strcmp(MLparams.mode.c_str(), "Proportional") == 0) {
     }
 
 
-// Send the 6 ARDparams (temperature, time, PWM, heat/cool, error, integral) to Matlab
+// Send the 6 ARDparams (temperature, time, PWM, heat/cool, error, integral) to Matlab for plotting
         Serial.print("Temperature = ");
         Serial.print(ARDparams.temp);  // Print temperature
         Serial.print(", Time = ");
@@ -237,7 +237,7 @@ else if (strcmp(MLparams.mode.c_str(), "Proportional") == 0) {
         Serial.print(", Integral = ");
         Serial.println(MLparams.KI * ARDparams.Integral);
 
-        Serial.print("Received Command: [");
+        Serial.print("Received Command: [");   // this info gets printed on the Matlab command line for diagnostics
         Serial.print(FromMatlab);
         Serial.print("], Mode: ");
         Serial.print(MLparams.mode);
