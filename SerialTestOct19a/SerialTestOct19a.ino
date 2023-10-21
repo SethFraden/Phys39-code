@@ -117,6 +117,7 @@ float average = total / (float)numMeasurements;
 
     ARDparams.temp = temperature;
     float previousTime = ARDparams.time;  // save previous time before updating new time. Used for dt for (integral) P/I control
+    float dt = 0;
     unsigned long currentTime = millis();
     ARDparams.time = (currentTime - startTime) / 1000.0;
 
@@ -175,12 +176,15 @@ else if (strcmp(MLparams.mode.c_str(), "Proportional") == 0) {
 
  else if (strcmp(MLparams.mode.c_str(), "P/I") == 0) {
 
-            float dt = ARDparams.time - previousTime; // time interval for previous measurement
+            dt = ARDparams.time - previousTime; // time interval for previous measurement
             previousTime = ARDparams.time;
            
             ARDparams.error = MLparams.Tset - ARDparams.temp;   // error
             ARDparams.Integral = ARDparams.Integral + dt * ARDparams.error;  // update integral of error
-            ARDparams.Integral = ARDparams.Integral * MLparams.ResetInt;    // zero integral?
+            ARDparams.Integral =  ARDparams.Integral * MLparams.ResetInt;    // zero integral?
+            if (MLparams.ResetInt == 0){  // reset zero command
+              MLparams.ResetInt = 1;
+            }
             float u = MLparams.Kp * ARDparams.error + MLparams.KI * ARDparams.Integral;  // calculate PI feedback
             ARDparams.pwmNow = min(abs(round(u)),255);  // magnitude of PI feedback term u limited to a max of 255 for arduino PWM
             ARDparams.HeatCool = sgn(u);  // sign of PI feedback (heat vs cool)
@@ -231,7 +235,7 @@ else if (strcmp(MLparams.mode.c_str(), "Proportional") == 0) {
         Serial.print(", error = ");
         Serial.print(ARDparams.error);
         Serial.print(", Integral = ");
-        Serial.println(ARDparams.Integral);
+        Serial.println(MLparams.KI * ARDparams.Integral);
 
         Serial.print("Received Command: [");
         Serial.print(FromMatlab);
@@ -247,9 +251,11 @@ else if (strcmp(MLparams.mode.c_str(), "Proportional") == 0) {
         Serial.print(MLparams.KI);
         Serial.print(", Tset: ");
         Serial.print(MLparams.Tset);
-        Serial.print(", Time = ");
-        Serial.print(MLparams.ResetInt);
         Serial.print(", ResetInt = ");
+        Serial.print(MLparams.ResetInt);
+        Serial.print(", dt = ");
+        Serial.print(dt);
+        Serial.print(", Time = ");
         Serial.print(ARDparams.time, 1); // Print elapsed time with 1 decimal place
         Serial.println(" seconds");
   }
