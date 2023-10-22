@@ -1,7 +1,7 @@
     //Works! October 21, 2023
     
     // Expects 7 Params from Matlab in the following order and MatlabParams class:
-    // MLparams MatlabParams MLparams[mode pwmNow HeatCool Kp KI Tset ResetInt] with formats [%s %d %d %f %f %f %d]
+    // MLparams MatlabParams MLparams[mode pwmNow HeatCool Kp KI Tset ResetInt SinAmp SinPer] with formats [%s %d %d %f %f %f %d %f %f]
     // Uses a String tokenizer to split the received string at spaces
 
     // Sends output of 6 values to Matlab as a ArduinoParams class:  
@@ -24,9 +24,11 @@ public:
   float KI;       // integral gain
   float Tset;     // Set temperature in centigrade
   int ResetInt;    // logical [0 1] to reset integral term in P/I
+  float SinAmp;    // Amplitude of sinusoidally varying T_set
+  float SinPer;    // Period in seconds of sinusoidally varying T_set
 
   // Constructor
-  MatlabParams(String m, int pwm, int hc, float kp, float ki, float t, int rI) {
+  MatlabParams(String m, int pwm, int hc, float kp, float ki, float t, int rI, float sA, float sP) {
     mode = m;
     pwmNow = pwm;
     HeatCool = hc;
@@ -34,6 +36,8 @@ public:
     KI = ki;
     Tset = t;
     ResetInt = rI;
+    SinAmp = sA;
+    SinPer = sP;
   }
 };
 
@@ -61,7 +65,7 @@ public:
 #define pwmOut1 9
 #define pwmOut2 10
 
-MatlabParams MLparams("Manual", 0, 1, 15.6, 0.1, 35.0, 1);  // Initial Matlab parameters. Set PWM = 0 for safety
+MatlabParams MLparams("Manual", 0, 1, 15.6, 0.1, 35.0, 1, 0, 60);  // Initial Matlab parameters. Set PWM = 0 for safety
 ArduinoParams ARDparams(20, 0, 0, 1, 0, 0);  // Initial Arduino parameters. Set initial time to zero
 
 // Fixed resistor value in ohms
@@ -127,8 +131,8 @@ float average = total / (float)numMeasurements;
   if (Serial.available() > 0) {
     receivedString = Serial.readStringUntil('\n'); // Read until a newline character is encountered
     FromMatlab = receivedString;
-    // 7 Params from Matlab
-    // [Mode PWM H/C Kp KI Tset ResetInt] with formats [%s %d %d %f %f %f %d] - one blank space between each field. No carriage return!
+    // 9 Params from Matlab
+    // [Mode PWM H/C Kp KI Tset ResetInt SinAmp SinPer] with formats [%s %d %d %f %f %f %d %f %f] - one blank space between each field. No carriage return!
     // Use a String tokenizer to split the received string at spaces
    
        // Split the received string at spaces using strtok
@@ -166,6 +170,16 @@ float average = total / (float)numMeasurements;
 
     if (token != nullptr) {
         MLparams.ResetInt = atoi(token);
+        token = strtok(nullptr, " ");
+    }
+
+    if (token != nullptr) {
+        MLparams.SinAmp = atof(token);
+        token = strtok(nullptr, " ");
+    }
+
+    if (token != nullptr) {
+        MLparams.SinPer = atof(token);
     }
    
     }
@@ -200,6 +214,22 @@ else if (strcmp(MLparams.mode.c_str(), "Proportional") == 0) {
             previousTime = ARDparams.time;
            
             ARDparams.error = MLparams.Tset - ARDparams.temp;   // error
+            ARDparams.Integral = ARDparams.Integral + dt * ARDparams.error;  // update integral of error
+            ARDparams.Integral =  ARDparams.Integral * MLparams.ResetInt;    // zero integral?
+            if (MLparams.ResetInt == 0){  // reset zero command
+              MLparams.ResetInt = 1;  // allows integration on next iteration
+            }
+            float u = MLparams.Kp * ARDparams.error + MLparams.KI * ARDparams.Integral;  // calculate PI feedback
+            ARDparams.pwmNow = min(abs(round(u)),255);  // magnitude of PI feedback term u limited to a max of 255 for arduino PWM
+            ARDparams.HeatCool = sgn(u);  // sign of PI feedback (heat vs cool)
+ }
+
+ else if (strcmp(MLparams.mode.c_str(), "Sine") == 0) {
+
+            dt = ARDparams.time - previousTime; // time interval for previous measurement
+            previousTime = ARDparams.time;
+           float sinPartTset =  MLparams.SinAmp * sin(2*PI*ARDparams.time / MLparams.SinPer);
+            ARDparams.error = MLparams.Tset + sinPartTset - ARDparams.temp;   // error
             ARDparams.Integral = ARDparams.Integral + dt * ARDparams.error;  // update integral of error
             ARDparams.Integral =  ARDparams.Integral * MLparams.ResetInt;    // zero integral?
             if (MLparams.ResetInt == 0){  // reset zero command
@@ -254,7 +284,7 @@ else if (strcmp(MLparams.mode.c_str(), "Proportional") == 0) {
         Serial.print(ARDparams.HeatCool);
         Serial.print(", error = ");
         Serial.print(ARDparams.error);
-        Serial.print(", Integral = ");
+        Serial.print(", KI * Integral = ");
         Serial.println(MLparams.KI * ARDparams.Integral);
 
         Serial.print("Received Command: [");   // this info gets printed on the Matlab command line for diagnostics
@@ -273,6 +303,10 @@ else if (strcmp(MLparams.mode.c_str(), "Proportional") == 0) {
         Serial.print(MLparams.Tset);
         Serial.print(", ResetInt = ");
         Serial.print(MLparams.ResetInt);
+        Serial.print(", SinAmp = ");
+        Serial.print(MLparams.SinAmp);        
+        Serial.print(", SinPer = ");
+        Serial.print(MLparams.SinPer);
         Serial.print(", dt = ");
         Serial.print(dt);
         Serial.print(", Time = ");
