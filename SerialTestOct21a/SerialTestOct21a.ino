@@ -1,6 +1,6 @@
     //Works! October 21, 2023
     
-    // Expects 7 Params from Matlab in the following order and MatlabParams class:
+    // Expects 9 Params from Matlab in the following order and MatlabParams class:
     // MLparams MatlabParams MLparams[mode pwmNow HeatCool Kp KI Tset ResetInt SinAmp SinPer] with formats [%s %d %d %f %f %f %d %f %f]
     // Uses a String tokenizer to split the received string at spaces
 
