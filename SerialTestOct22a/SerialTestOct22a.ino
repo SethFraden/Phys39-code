@@ -4,8 +4,8 @@
     // MLparams MatlabParams MLparams[mode pwmNow HeatCool Kp KI Tset ResetInt SinAmp SinPer] with formats [%s %d %d %f %f %f %d %f %f]
     // Uses a String tokenizer to split the received string at spaces
 
-    // Sends output of 6 values to Matlab as a ArduinoParams class:  
-    // ArduinoParams ARDparams[temp, time, pwmNow, HeatCool, error, Integral] with formats [%f, %f, %d, %d, %f %f]
+    // Sends output of 7 values to Matlab as a ArduinoParams class:  
+    // ArduinoParams ARDparams[temp, time, pwmNow, HeatCool, error, Integral, Tset] with formats [%f, %f, %d, %d, %f, %f, %f]
 
 
 
@@ -49,15 +49,17 @@ public:
   int HeatCool;    // Cool or Heat [-1 1]
   float error;     // Tset - temperature
   float Integral;   // integral term
+  float Tset;        // set Temperature with Sin term
 
   // Constructor
-  ArduinoParams(float T, float t, int pwm, int HC, float e, float I) {
+  ArduinoParams(float T, float t, int pwm, int HC, float e, float I, float Ts) {
     temp = T;
     time = t;
     pwmNow = pwm;
     HeatCool = HC;
     error = e;
     Integral = I;
+    Tset = Ts;
   }
 };
 
@@ -66,7 +68,7 @@ public:
 #define pwmOut2 10
 
 MatlabParams MLparams("Manual", 0, 1, 15.6, 0.1, 35.0, 1, 0, 60);  // Initial Matlab parameters. Set PWM = 0 for safety
-ArduinoParams ARDparams(20, 0, 0, 1, 0, 0);  // Initial Arduino parameters. Set initial time to zero
+ArduinoParams ARDparams(20, 0, 0, 1, 0, 0, 20);  // Initial Arduino parameters. Set initial time to zero
 
 // Fixed resistor value in ohms
 // const float fixedResistance = 4670.0; // my board
@@ -223,12 +225,13 @@ else if (strcmp(MLparams.mode.c_str(), "Proportional") == 0) {
             ARDparams.HeatCool = sgn(u);  // sign of PI feedback (heat vs cool)
  }
 
- else if (strcmp(MLparams.mode.c_str(), "Sine") == 0) {
+ else if (strcmp(MLparams.mode.c_str(), "Sin") == 0) {
 
             dt = ARDparams.time - previousTime; // time interval for previous measurement
             previousTime = ARDparams.time;
-           float sinPartTset =  MLparams.SinAmp * sin(2*PI*ARDparams.time / MLparams.SinPer);
-            ARDparams.error = MLparams.Tset + sinPartTset - ARDparams.temp;   // error
+            float sinPartTset =  MLparams.SinAmp * sin(2*PI*ARDparams.time / MLparams.SinPer);
+            ARDparams.Tset = MLparams.Tset + sinPartTset;
+            ARDparams.error = ARDparams.Tset - ARDparams.temp;   // error
             ARDparams.Integral = ARDparams.Integral + dt * ARDparams.error;  // update integral of error
             ARDparams.Integral =  ARDparams.Integral * MLparams.ResetInt;    // zero integral?
             if (MLparams.ResetInt == 0){  // reset zero command
@@ -271,8 +274,11 @@ else if (strcmp(MLparams.mode.c_str(), "Proportional") == 0) {
       analogWrite(pwmOut1,0); 
     }
 
+if (strcmp(MLparams.mode.c_str(), "Sin") != 0) {
+  ARDparams.Tset = MLparams.Tset;
+}
 
-// Send the 6 ARDparams (temperature, time, PWM, heat/cool, error, integral) to Matlab for plotting
+// Send the 7 ARDparams (temperature, time, PWM, heat/cool, error, integral, Tset) to Matlab for plotting
         Serial.print("Temperature = ");
         Serial.print(ARDparams.temp);  // Print temperature
         Serial.print(", Time = ");
@@ -284,7 +290,9 @@ else if (strcmp(MLparams.mode.c_str(), "Proportional") == 0) {
         Serial.print(", error = ");
         Serial.print(ARDparams.error);
         Serial.print(", KI * Integral = ");
-        Serial.println(MLparams.KI * ARDparams.Integral);
+        Serial.print(MLparams.KI * ARDparams.Integral);
+        Serial.print(", Tset = ");
+        Serial.println(ARDparams.Tset);
 
         Serial.print("Received Command: [");   // this info gets printed on the Matlab command line for diagnostics
         Serial.print(FromMatlab);
