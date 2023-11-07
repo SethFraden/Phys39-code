@@ -258,9 +258,9 @@ else if (strcmp(MLparams.mode.c_str(), "Proportional") == 0) {
             }
             float u = MLparams.Kp * ARDparams.error + MLparams.KI * ARDparams.Integral;  // calculate PI feedback
 // Increase PWM when cooling. dT/dPWM heating = 2 * dT/dPWM cooling, so increase PWM by 2 when cooling compared to heating.
-            if (u < 0){
-              u = 2*u;
-             }
+            // if (u < 0){
+            //   u = 2*u;
+            //  }
             ARDparams.pwmNow = min(abs(round(u)),255);  // magnitude of PI feedback term u limited to a max of 255 for arduino PWM
             ARDparams.HeatCool = sgn(u);  // sign of PI feedback (heat vs cool)
  }
